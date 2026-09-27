@@ -1,0 +1,22 @@
+{
+  "name": "sell-heaps-more-society",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Provisioner and bot for the Sell Heaps More Society Discord server.",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "plan": "node src/provision/index.js --dry-run",
+    "provision": "node src/provision/index.js",
+    "commands": "node src/bot/deploy-commands.js",
+    "bot": "node src/bot/index.js",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.27.0",
+    "dotenv": "^16.4.7",
+    "luxon": "^3.7.2"
+  }
+}
