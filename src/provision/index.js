@@ -169,27 +169,53 @@ async function syncChannelContent(channel, key, items, ctx, state) {
   const parts = items.flatMap((item) =>
     renderMessages(item.file, ctx).map((text, i) => ({ text, pin: Boolean(item.pin) && i === 0 })),
   );
-  const saved = state.messages[key] ?? [];
+  let saved = state.messages[key] ?? [];
+  if (!saved.length) {
+    // No local memory (e.g. a fresh GitHub Actions run): adopt the bot's own earlier posts.
+    const meId = channel.guild.members.me.id;
+    const recent = await channel.messages.fetch({ limit: 100 });
+    saved = [...recent.values()]
+      .filter((m) => m.author?.id === meId)
+      .sort((a, b) => a.createdTimestamp - b.createdTimestamp)
+      .map((m) => ({ id: m.id }));
+  }
   const next = [];
   for (const [i, part] of parts.entries()) {
-    const h = hash(part.text);
     let msg = saved[i] ? await channel.messages.fetch(saved[i].id).catch(() => null) : null;
     if (!msg) {
       msg = await channel.send({ content: part.text, allowedMentions: { parse: [] } });
       log(`+ #${channel.name} message ${i + 1}`);
-    } else if (saved[i].hash !== h) {
+    } else if (msg.content !== part.text) {
       await msg.edit({ content: part.text, allowedMentions: { parse: [] } });
       log(`~ #${channel.name} message ${i + 1} updated`);
     }
     if (part.pin && !msg.pinned) await msg.pin(REASON);
     if (!part.pin && msg.pinned) await msg.unpin(REASON);
-    next.push({ id: msg.id, hash: h });
+    next.push({ id: msg.id, hash: hash(part.text) });
   }
   for (const old of saved.slice(parts.length)) {
     await channel.messages.delete(old.id).catch(() => {});
     log(`- #${channel.name} removed an old message`);
   }
   state.messages[key] = next;
+}
+
+// The bot's existing posts in a forum, by title (active + archived), fetched once per run.
+const forumThreadCache = new Map();
+async function botThreads(forum) {
+  if (!forumThreadCache.has(forum.id)) {
+    const meId = forum.guild.members.me.id;
+    const [active, archived] = await Promise.all([
+      forum.threads.fetchActive(),
+      forum.threads.fetchArchived({ limit: 100 }),
+    ]);
+    const byTitle = new Map();
+    for (const t of [...active.threads.values(), ...archived.threads.values()]) {
+      if (t.parentId === forum.id && t.ownerId === meId) byTitle.set(t.name, t);
+    }
+    forumThreadCache.set(forum.id, byTitle);
+  }
+  return forumThreadCache.get(forum.id);
 }
 
 async function syncForumPost(forum, key, post, { pin = false, lock = false }, state) {
@@ -201,6 +227,8 @@ async function syncForumPost(forum, key, post, { pin = false, lock = false }, st
   const h = hash(post.body + post.tags.join());
 
   let thread = saved ? await forum.guild.channels.fetch(saved.id).catch(() => null) : null;
+  if (!thread) thread = (await botThreads(forum)).get(post.title) ?? null;
+  const sameTags = (t) => [...(t.appliedTags ?? [])].sort().join() === [...appliedTags].sort().join();
   if (!thread) {
     thread = await forum.threads.create({
       name: post.title,
@@ -209,12 +237,14 @@ async function syncForumPost(forum, key, post, { pin = false, lock = false }, st
       reason: REASON,
     });
     log(`+ #${forum.name} post "${post.title}"`);
-  } else if (saved.hash !== h) {
-    if (thread.archived) await thread.setArchived(false, REASON);
+  } else if (saved?.hash !== h) {
     const starter = await thread.fetchStarterMessage();
-    await starter.edit({ content: post.body, allowedMentions: { parse: [] } });
-    await thread.setAppliedTags(appliedTags, REASON);
-    log(`~ #${forum.name} post "${post.title}" updated`);
+    if (starter.content !== post.body || !sameTags(thread)) {
+      if (thread.archived) await thread.setArchived(false, REASON);
+      await starter.edit({ content: post.body, allowedMentions: { parse: [] } });
+      await thread.setAppliedTags(appliedTags, REASON);
+      log(`~ #${forum.name} post "${post.title}" updated`);
+    }
   }
   if (pin && !thread.flags.has('Pinned')) await thread.pin(REASON);
   if (lock && !thread.locked) await thread.setLocked(true, REASON);
@@ -363,6 +393,7 @@ async function ensureOnboarding(guild, state) {
 
 // ---------------------------------------------------------------------------
 export async function provision(guild) {
+  forumThreadCache.clear();
   const state = loadState(guild.id);
   for (const k of ['roles', 'categories', 'channels', 'messages', 'forumPosts']) state[k] ??= {};
   const save = () => saveState(guild.id, state);

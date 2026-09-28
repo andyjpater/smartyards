@@ -70,5 +70,12 @@ test('provisions an empty server, then re-runs without duplicating anything', as
   await provision(guild);
   const creates = guild.log.slice(before).filter(([op]) => /create|send/.test(op));
   assert.deepEqual(creates, []);
+
+  // Fresh run with no saved state (like GitHub Actions): adopts existing posts, no duplicates.
+  rmSync(dir, { recursive: true, force: true });
+  const before2 = guild.log.length;
+  await provision(guild);
+  const creates2 = guild.log.slice(before2).filter(([op]) => /create|send|edit/.test(op) && op !== 'guild.edit');
+  assert.deepEqual(creates2, []);
   quiet.mock.restore();
 });

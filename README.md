@@ -115,6 +115,13 @@ npm run bot                 # starts the automations (keep this running)
 
 Discord's default `#general` gets adopted and moved into SOCIETY. Delete the leftover empty *Text Channels* / *Voice Channels* categories and the default *General* voice channel.
 
+**No terminal? Run it from GitHub instead.**
+1. On GitHub open the repo → **Settings → Secrets and variables → Actions → New repository secret**, and add `DISCORD_TOKEN`, `DISCORD_CLIENT_ID` and `DISCORD_GUILD_ID`.
+2. Go to the **Actions** tab → **Provision Discord server** → **Run workflow**.
+3. Watch it run (about 2–3 minutes). Re-run it any time you change `content/` or the config. It finds its earlier posts and edits them rather than duplicating.
+
+This builds the server and registers the commands. The always-on bot (welcome, reminders) still needs a host. See step 4.
+
 ### 3. Finish in Discord (things the API can't do)
 1. **Give yourself Founder**, and give your coaches **Coach**. Tag your beta businesses **Founding Member**.
 2. **Server Settings → Onboarding → Server Guide**: turn it on, then add:

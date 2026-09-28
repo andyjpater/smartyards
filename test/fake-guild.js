@@ -41,13 +41,15 @@ export function createFakeGuild() {
       for (const { role, position } of list) roleCache.get(role).position = position;
     },
   };
-  guild.members = { me: { roles: { get highest() { return botRole; } } } };
+  guild.members = { me: { id: 'bot-user', roles: { get highest() { return botRole; } } } };
 
   const channelCache = new Collection();
   const makeMessage = (channel, content) => {
     const msg = {
       id: id(),
       content,
+      author: { id: 'bot-user' },
+      createdTimestamp: seq,
       pinned: false,
       url: `https://discord.com/channels/${guild.id}/${channel.id}/x`,
       async pin() { msg.pinned = true; },
@@ -89,17 +91,25 @@ export function createFakeGuild() {
       messages: {
         cache: messages,
         async fetch(mid) {
+          if (typeof mid === 'object') return new Collection(messages);
           if (!messages.has(mid)) throw new Error('Unknown Message');
           return messages.get(mid);
         },
         async delete(mid) { messages.delete(mid); },
       },
       threads: {
+        async fetchActive() {
+          return { threads: channelCache.filter((c) => c.parentId === channel.id && c.type === ChannelType.PublicThread) };
+        },
+        async fetchArchived() {
+          return { threads: new Collection() };
+        },
         async create(d) {
           if (channel.type !== ChannelType.GuildForum) throw new Error('not a forum');
           const thread = makeChannel({ name: d.name, type: ChannelType.PublicThread, parent: channel.id });
           const starter = makeMessage(thread, d.message.content);
           Object.assign(thread, {
+            ownerId: 'bot-user',
             appliedTags: d.appliedTags,
             locked: false,
             archived: false,

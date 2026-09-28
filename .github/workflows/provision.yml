@@ -1,0 +1,39 @@
+# Builds/updates the Discord server from the GitHub website — no terminal needed.
+# Setup: add DISCORD_TOKEN, DISCORD_CLIENT_ID and DISCORD_GUILD_ID under
+# Settings → Secrets and variables → Actions. Then: Actions → Provision Discord server → Run workflow.
+name: Provision Discord server
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: provision
+  cancel-in-progress: false
+
+jobs:
+  provision:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Check config and content
+        run: npm test
+      - name: Build the server
+        run: npm run provision
+        env:
+          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+          DISCORD_GUILD_ID: ${{ secrets.DISCORD_GUILD_ID }}
+      - name: Register bot commands
+        run: npm run commands
+        env:
+          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+          DISCORD_CLIENT_ID: ${{ secrets.DISCORD_CLIENT_ID }}
+          DISCORD_GUILD_ID: ${{ secrets.DISCORD_GUILD_ID }}
